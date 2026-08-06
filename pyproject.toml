@@ -1,0 +1,22 @@
+[project]
+name = "mcp-server"
+version = "0.1.0"
+description = "Servidor MCP para el PS12"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx",
+    "fastmcp",
+    "truststore",
+    "python-dotenv"
+]
+
+[project.scripts]
+mcp-server = "mcp_server.server:main"
+
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
