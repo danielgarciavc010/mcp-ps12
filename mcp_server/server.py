@@ -32,6 +32,7 @@ https://help.ivanti.com/ht/help/en_US/ISM/2021/admin/Content/Configure/API/RestA
 
 import os
 import re
+import sys
 import pathlib as _pathlib
 from typing import Any, Optional
 
@@ -47,6 +48,13 @@ except ImportError:
 
 # Config
 load_dotenv()
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stdin, "reconfigure"):
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 TENANT_URL = os.getenv("IVANTI_TENANT_URL", "").rstrip("/")
 API_KEY    = os.getenv("IVANTI_API_KEY", "")
@@ -72,6 +80,16 @@ mcp = FastMCP(
         "gestionar solicitudes del catalogo de servicios y subir adjuntos."
     ),
 )
+
+
+def _clean_unicode(obj: Any) -> Any:
+    if isinstance(obj, str):
+        return obj.replace(chr(160), " ")
+    elif isinstance(obj, dict):
+        return {k: _clean_unicode(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_clean_unicode(elem) for elem in obj]
+    return obj
 
 
 def _error(code: str, message: str) -> dict:
@@ -107,9 +125,9 @@ async def _request(
         )
 
     try:
-        return response.json(), None
+        return _clean_unicode(response.json()), None
     except Exception:
-        return response.text, None
+        return _clean_unicode(response.text), None
 
 
 # Tools - Business Objects (CRUD)
