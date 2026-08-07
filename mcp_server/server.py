@@ -33,6 +33,7 @@ https://help.ivanti.com/ht/help/en_US/ISM/2021/admin/Content/Configure/API/RestA
 import os
 import re
 import sys
+import unicodedata
 import pathlib as _pathlib
 from typing import Any, Optional
 
@@ -84,11 +85,14 @@ mcp = FastMCP(
 
 def _clean_unicode(obj: Any) -> Any:
     if isinstance(obj, str):
-        return obj.replace(chr(160), " ")
+        s = obj.replace(chr(160), " ").replace("\u00a0", " ")
+        return unicodedata.normalize("NFKC", s)
     elif isinstance(obj, dict):
-        return {k: _clean_unicode(v) for k, v in obj.items()}
+        return {_clean_unicode(k): _clean_unicode(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [_clean_unicode(elem) for elem in obj]
+    elif isinstance(obj, tuple):
+        return tuple(_clean_unicode(elem) for elem in obj)
     return obj
 
 
@@ -458,7 +462,7 @@ async def get_metadata(object_name: str) -> dict:
     else:
         text = resp.text
 
-    return {"ok": True, "data": text}
+    return _clean_unicode({"ok": True, "data": text})
 
 
 @mcp.tool()
