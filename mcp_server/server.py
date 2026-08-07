@@ -86,7 +86,9 @@ mcp = FastMCP(
 def _clean_unicode(obj: Any) -> Any:
     if isinstance(obj, str):
         s = obj.replace(chr(160), " ").replace("\u00a0", " ")
-        return unicodedata.normalize("NFKC", s)
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        return s.encode("ascii", errors="replace").decode("ascii")
     elif isinstance(obj, dict):
         return {_clean_unicode(k): _clean_unicode(v) for k, v in obj.items()}
     elif isinstance(obj, list):
