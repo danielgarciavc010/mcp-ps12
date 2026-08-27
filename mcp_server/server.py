@@ -136,6 +136,18 @@ def _build_odata_filter(filters: list[dict[str, Any]]) -> str | None:
     return " and ".join(f"({expression})" for expression in expressions)
 
 
+def _build_odata_order_by(order_by: str) -> str | None:
+    match = re.fullmatch(
+        r"([A-Za-z_][A-Za-z0-9_]*)(?:\s+(asc|desc))?",
+        order_by.strip(),
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    field, direction = match.groups()
+    return f"{field} {(direction or 'asc').lower()}"
+
+
 async def _request(
     method: str,
     endpoint: str,
@@ -179,6 +191,7 @@ async def list_business_objects(
     select: Optional[str] = None,
     search: Optional[str] = None,
     filters: Optional[list[dict[str, Any]]] = None,
+    order_by: Optional[str] = None,
 ) -> dict:
     """
     Lista registros de un business object de Ivanti (p.ej. 'incidents',
@@ -193,6 +206,8 @@ async def list_business_objects(
         filters: filtros estructurados. Cada elemento debe incluir
             "field", "operator" y "value". Operadores: eq, ne, gt, ge,
             lt, le, contains, startswith, endswith. Se combinan con AND.
+        order_by: campo y direccion de ordenacion OData, por ejemplo
+            "CreatedDateTime desc". Si no se indica direccion, usa asc.
 
     Returns:
         {"ok": true, "data": { ...registros del servicio... }}
@@ -213,9 +228,20 @@ async def list_business_objects(
     else:
         generated_filter = None
 
+    generated_order_by = None
+    if order_by:
+        generated_order_by = _build_odata_order_by(order_by)
+        if generated_order_by is None:
+            return _error(
+                "INVALID_ORDER_BY",
+                "order_by debe tener el formato 'Campo asc|desc'.",
+            )
+
     params: dict[str, Any] = {"$top": min(top, MAX_TOP)}
     if generated_filter:
         params["$filter"] = generated_filter
+    if generated_order_by:
+        params["$orderby"] = generated_order_by
     if select:
         params["$select"] = select
     elif object_name.lower() in ("incidents", "incident"):
@@ -230,7 +256,7 @@ async def list_business_objects(
         return err
 
     return {"ok": True, "data": raw}
-
+    
 
 @mcp.tool()
 async def get_business_object(object_name: str, rec_id: str) -> dict:
