@@ -102,6 +102,40 @@ def _error(code: str, message: str) -> dict:
     return {"ok": False, "error": {"code": code, "message": message}}
 
 
+def _odata_literal(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    escaped = str(value).replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _build_odata_filter(filters: list[dict[str, Any]]) -> str | None:
+    allowed_operators = {
+        "eq", "ne", "gt", "ge", "lt", "le",
+        "contains", "startswith", "endswith",
+    }
+    expressions = []
+    for item in filters:
+        field = str(item.get("field", "")).strip()
+        operator = str(item.get("operator", "")).lower().strip()
+        if (
+            not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", field)
+            or operator not in allowed_operators
+            or "value" not in item
+        ):
+            return None
+        value = _odata_literal(item["value"])
+        if operator in {"contains", "startswith", "endswith"}:
+            expressions.append(f"{operator}({field}, {value})")
+        else:
+            expressions.append(f"{field} {operator} {value}")
+    return " and ".join(f"({expression})" for expression in expressions)
+
+
 async def _request(
     method: str,
     endpoint: str,
@@ -142,9 +176,9 @@ async def _request(
 async def list_business_objects(
     object_name: str,
     top: int = 10,
-    filter_query: Optional[str] = None,
     select: Optional[str] = None,
     search: Optional[str] = None,
+    filters: Optional[list[dict[str, Any]]] = None,
 ) -> dict:
     """
     Lista registros de un business object de Ivanti (p.ej. 'incidents',
@@ -154,9 +188,11 @@ async def list_business_objects(
     Args:
         object_name: nombre del business object en plural (ej: 'incidents').
         top: numero maximo de registros a devolver (max. 25).
-        filter_query: filtro OData opcional (ej: "Status eq 'Active'").
         select: campos a devolver separados por coma (ej: "Subject,Status").
         search: palabra clave de busqueda de texto libre ($search).
+        filters: filtros estructurados. Cada elemento debe incluir
+            "field", "operator" y "value". Operadores: eq, ne, gt, ge,
+            lt, le, contains, startswith, endswith. Se combinan con AND.
 
     Returns:
         {"ok": true, "data": { ...registros del servicio... }}
@@ -167,9 +203,19 @@ async def list_business_objects(
     )
     MAX_TOP = 25
 
+    if filters:
+        generated_filter = _build_odata_filter(filters)
+        if generated_filter is None:
+            return _error(
+                "INVALID_FILTER",
+                "Cada filtro requiere field, operator valido y value.",
+            )
+    else:
+        generated_filter = None
+
     params: dict[str, Any] = {"$top": min(top, MAX_TOP)}
-    if filter_query:
-        params["$filter"] = filter_query
+    if generated_filter:
+        params["$filter"] = generated_filter
     if select:
         params["$select"] = select
     elif object_name.lower() in ("incidents", "incident"):
