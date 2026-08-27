@@ -237,7 +237,10 @@ async def list_business_objects(
                 "order_by debe tener el formato 'Campo asc|desc'.",
             )
 
-    params: dict[str, Any] = {"$top": min(top, MAX_TOP)}
+    params: dict[str, Any] = {
+        "$top": min(top, MAX_TOP),
+        "$count": "true",
+    }
     if generated_filter:
         params["$filter"] = generated_filter
     if generated_order_by:
@@ -256,6 +259,7 @@ async def list_business_objects(
         return err
 
     return {"ok": True, "data": raw}
+
     
 
 @mcp.tool()
