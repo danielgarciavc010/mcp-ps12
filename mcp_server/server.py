@@ -216,6 +216,10 @@ async def list_business_objects(
         "RecId,IncidentNumber,Subject,Status,Priority,"
         "Category,CreatedBy,CreatedDateTime"
     )
+    EMPLOYEE_DEFAULT_SELECT = (
+        "RecId,DisplayName,LoginID,PrimaryEmail,Department,Status,"
+        "Title,ManagerEmail,EmployeeLocation,BusinessUnit,PrimaryPhone,Disabled"
+    )
     MAX_TOP = 25
 
     if filters:
@@ -249,6 +253,8 @@ async def list_business_objects(
         params["$select"] = select
     elif object_name.lower() in ("incidents", "incident"):
         params["$select"] = DEFAULT_SELECT
+    elif object_name.lower() in ("employees", "employee"):
+        params["$select"] = EMPLOYEE_DEFAULT_SELECT
     if search:
         params["$search"] = search
 
