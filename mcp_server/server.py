@@ -526,11 +526,11 @@ KNOWN_FIELD_VALUES = {
         {"name": "Closed", "value": "Closed"},
     ],
     "Priority": [
-        {"name": "1 - Critical", "value": "1"},
-        {"name": "2 - High", "value": "2"},
-        {"name": "3 - Medium", "value": "3"},
-        {"name": "4 - Low", "value": "4"},
-        {"name": "5 - Planning", "value": "5"},
+        {"name": "1", "value": "1"},
+        {"name": "2", "value": "2"},
+        {"name": "3", "value": "3"},
+        {"name": "4", "value": "4"},
+        {"name": "5", "value": "5"},
     ],
     "Urgency": [
         {"name": "Low", "value": "Low"},
