@@ -518,29 +518,29 @@ async def run_saved_search(
 # Valores conocidos para campos comunes (no siempre expuestos en metadatos XML)
 KNOWN_FIELD_VALUES = {
     "Status": [
-        {"name": "Logged", "value": "Logged"},
-        {"name": "Assigned", "value": "Assigned"},
-        {"name": "Active", "value": "Active"},
-        {"name": "Waiting for Resolution", "value": "Waiting for Resolution"},
-        {"name": "Resolved", "value": "Resolved"},
-        {"name": "Closed", "value": "Closed"},
+        {"name": "Logged", "description": ""},
+        {"name": "Assigned", "description": ""},
+        {"name": "Active", "description": ""},
+        {"name": "Waiting for Resolution", "description": ""},
+        {"name": "Resolved", "description": ""},
+        {"name": "Closed", "description": ""},
     ],
     "Priority": [
-        {"name": "Critical", "value": "1"},
-        {"name": "High", "value": "2"},
-        {"name": "Medium", "value": "3"},
-        {"name": "Low", "value": "4"},
-        {"name": "Planning", "value": "5"},
+        {"name": "1", "description": "Priority 1 - Critical"},
+        {"name": "2", "description": "Priority 2 - High"},
+        {"name": "3", "description": "Priority 3 - Medium"},
+        {"name": "4", "description": "Priority 4 - Low"},
+        {"name": "5", "description": "Priority 5 - Planning"},
     ],
     "Urgency": [
-        {"name": "Low", "value": "Low"},
-        {"name": "Medium", "value": "Medium"},
-        {"name": "High", "value": "High"},
+        {"name": "Low", "description": ""},
+        {"name": "Medium", "description": ""},
+        {"name": "High", "description": ""},
     ],
     "Impact": [
-        {"name": "Low", "value": "Low"},
-        {"name": "Medium", "value": "Medium"},
-        {"name": "High", "value": "High"},
+        {"name": "Low", "description": ""},
+        {"name": "Medium", "description": ""},
+        {"name": "High", "description": ""},
     ],
 }
 
