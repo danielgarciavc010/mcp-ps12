@@ -515,6 +515,35 @@ async def run_saved_search(
 
 # Tools - Metadata & Discovery
 
+# Valores conocidos para campos comunes (no siempre expuestos en metadatos XML)
+KNOWN_FIELD_VALUES = {
+    "Status": [
+        {"name": "Logged", "value": "Logged"},
+        {"name": "Assigned", "value": "Assigned"},
+        {"name": "Active", "value": "Active"},
+        {"name": "Waiting for Resolution", "value": "Waiting for Resolution"},
+        {"name": "Resolved", "value": "Resolved"},
+        {"name": "Closed", "value": "Closed"},
+    ],
+    "Priority": [
+        {"name": "1 - Critical", "value": "1"},
+        {"name": "2 - High", "value": "2"},
+        {"name": "3 - Medium", "value": "3"},
+        {"name": "4 - Low", "value": "4"},
+        {"name": "5 - Planning", "value": "5"},
+    ],
+    "Urgency": [
+        {"name": "Low", "value": "Low"},
+        {"name": "Medium", "value": "Medium"},
+        {"name": "High", "value": "High"},
+    ],
+    "Impact": [
+        {"name": "Low", "value": "Low"},
+        {"name": "Medium", "value": "Medium"},
+        {"name": "High", "value": "High"},
+    ],
+}
+
 @mcp.tool()
 async def get_metadata(object_name: str) -> dict:
     """
@@ -645,6 +674,9 @@ async def list_fields(object_name: str) -> dict:
         type_base = type_str.split(".")[-1] if "." in type_str else type_str
         if type_base in enum_types:
             field_data["enum_values"] = enum_types[type_base]
+        # También verificar valores conocidos hardcodeados (para campos que no vienen en XML)
+        elif name in KNOWN_FIELD_VALUES:
+            field_data["enum_values"] = KNOWN_FIELD_VALUES[name]
 
         fields_list.append(field_data)
 
