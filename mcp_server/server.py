@@ -554,6 +554,7 @@ async def list_fields(object_name: str) -> dict:
     """
     Devuelve la lista de campos (nombre y tipo) de un business object,
     parseada desde el XML de metadatos. Mas compacta que get_metadata().
+    Para campos de tipo enumerado, incluye los valores permitidos.
 
     Args:
         object_name: nombre del business object en plural (ej: 'incidents').
@@ -598,13 +599,62 @@ async def list_fields(object_name: str) -> dict:
         r'<Property Name="([^"]+)" Type="([^"]+)"', entity_block
     )
 
+    # Extraer todos los EnumTypes disponibles en los metadatos
+    enum_types = {}
+    try:
+        # Buscar cada EnumType en el XML
+        enum_start_pattern = r'<EnumType\s+Name="([^"]+)"'
+        for enum_start_match in re.finditer(enum_start_pattern, xml_text):
+            enum_name = enum_start_match.group(1)
+            start_pos = enum_start_match.start()
+           
+            # Buscar el cierre </EnumType> correspondiente
+            end_pattern = r'</EnumType>'
+            end_match = re.search(end_pattern, xml_text[start_pos:])
+            if not end_match:
+                continue
+           
+            end_pos = start_pos + end_match.end()
+            enum_content = xml_text[start_pos:end_pos]
+           
+            # Extraer los valores (Members) del enum
+            members = []
+            for member_match in re.finditer(
+                r'<Member\s+Name="([^"]+)"(?:\s+Value="([^"]*)")?',
+                enum_content
+            ):
+                member_name = member_match.group(1)
+                member_value = member_match.group(2) or ""
+                members.append({"name": member_name, "value": member_value})
+           
+            if members:  # Solo agregar si hay miembros
+                enum_types[enum_name] = members
+    except Exception:
+        # Si falla la extracción de enums, continuar sin ellos
+        pass
+
+    fields_list = []
+    for name, type_str in props:
+        field_data = {
+            "name": name,
+            "type": type_str,
+        }
+
+        # Si el tipo es un EnumType, incluir los valores permitidos
+        # El tipo puede ser "Namespace.EnumTypeName" o solo "EnumTypeName"
+        type_base = type_str.split(".")[-1] if "." in type_str else type_str
+        if type_base in enum_types:
+            field_data["enum_values"] = enum_types[type_base]
+
+        fields_list.append(field_data)
+
     return {
         "ok": True,
         "data": {
             "object_name": object_name,
             "entity_type_matched": matched_name,
             "field_count": len(props),
-            "fields": [{"name": n, "type": t} for n, t in props],
+            "fields": fields_list,
         },
     }
 
