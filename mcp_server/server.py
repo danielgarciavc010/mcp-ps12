@@ -659,7 +659,7 @@ async def list_fields(object_name: str) -> dict:
             if members:  # Solo agregar si hay miembros
                 enum_types[enum_name] = members
     except Exception:
-        # Si falla la extracción de enums, continuar sin ellos
+        # Si falla la extraccion de enums, continuar sin ellos
         pass
 
     fields_list = []
@@ -674,7 +674,7 @@ async def list_fields(object_name: str) -> dict:
         type_base = type_str.split(".")[-1] if "." in type_str else type_str
         if type_base in enum_types:
             field_data["enum_values"] = enum_types[type_base]
-        # También verificar valores conocidos hardcodeados (para campos que no vienen en XML)
+        # Tambien verificar valores conocidos hardcodeados (para campos que no vienen en XML)
         elif name in KNOWN_FIELD_VALUES:
             field_data["enum_values"] = KNOWN_FIELD_VALUES[name]
 
