@@ -105,12 +105,33 @@ def _error(code: str, message: str) -> dict:
 def _odata_literal(value: Any) -> str:
     if value is None:
         return "null"
+
     if isinstance(value, bool):
         return str(value).lower()
+
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return str(value)
-    escaped = str(value).replace("'", "''")
+
+    str_value = str(value).strip()
+
+    # Detectar fecha y hora ISO 8601.
+    # Ejemplos aceptados:
+    # 2026-08-02T00:00:00Z
+    # 2026-08-02T00:00:00.000Z
+    # 2026-08-02T02:00:00+02:00
+    if re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}"
+        r"T\d{2}:\d{2}:\d{2}"
+        r"(?:\.\d{1,7})?"
+        r"(?:Z|[+-]\d{2}:\d{2})",
+        str_value,
+    ):
+        return str_value
+
+    escaped = str_value.replace("'", "''")
     return f"'{escaped}'"
+
+
 
 
 def _build_odata_filter(filters: list[dict[str, Any]]) -> str | None:
