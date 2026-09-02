@@ -13,6 +13,7 @@ Herramientas:
     - create_incident_simple
     - update_business_object
     - delete_business_object
+    - export_to_excel
     - run_quick_action
     - list_fields
     - run_saved_search
@@ -35,11 +36,16 @@ import re
 import sys
 import unicodedata
 import pathlib as _pathlib
+import base64
+import io
+from datetime import datetime
 from typing import Any, Optional
 
 import httpx
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
 
 try:
     import truststore
@@ -477,7 +483,172 @@ async def delete_business_object(object_name: str, rec_id: str) -> dict:
 
     return {"ok": True, "data": {"status": "deleted", "rec_id": rec_id}}
 
+# Tools - Export
 
+@mcp.tool()
+async def export_to_excel(
+    object_name: str,
+    select: Optional[str] = None,
+    search: Optional[str] = None,
+    filters: Optional[list[dict[str, Any]]] = None,
+    order_by: Optional[str] = None,
+) -> dict:
+    """
+    Exporta TODOS los registros de un business object a un archivo Excel,
+    con paginación automática. Genera un archivo .xlsx y devuelve el contenido
+    en base64.
+
+    Args:
+        object_name: nombre del business object en plural (ej: 'incidents').
+        select: campos a exportar separados por coma (ej: "Subject,Status").
+                Si no se especifica, usa los campos por defecto de list_business_objects.
+        search: palabra clave de busqueda de texto libre ($search).
+        filters: filtros estructurados. Cada elemento debe incluir
+                "field", "operator" y "value". Operadores: eq, ne, gt, ge,
+                lt, le, contains, startswith, endswith. Se combinan con AND.
+        order_by: campo y direccion de ordenacion OData, por ejemplo
+                "CreatedDateTime desc". Si no se indica direccion, usa asc.
+
+    Returns:
+        {
+            "ok": true,
+            "data": {
+                "filename": "incidents_2026-09-02.xlsx",
+                "base64": "UEsDBBQABgAIAAAA...",
+                "record_count": 150
+            }
+        }
+    """
+    DEFAULT_SELECT = (
+        "RecId,IncidentNumber,Subject,Status,Priority,"
+        "Category,CreatedBy,CreatedDateTime"
+    )
+    EMPLOYEE_DEFAULT_SELECT = (
+        "RecId,DisplayName,LoginID,PrimaryEmail,Department,Status,"
+        "Title,ManagerEmail,EmployeeLocation,BusinessUnit,PrimaryPhone,Disabled"
+    )
+    PAGE_SIZE = 1000  # Traer 1000 registros por página
+
+    # Construir filtro OData
+    if filters:
+        generated_filter = _build_odata_filter(filters)
+        if generated_filter is None:
+            return _error(
+                "INVALID_FILTER",
+                "Cada filtro requiere field, operator valido y value.",
+            )
+    else:
+        generated_filter = None
+
+    # Construir order_by OData
+    generated_order_by = None
+    if order_by:
+        generated_order_by = _build_odata_order_by(order_by)
+        if generated_order_by is None:
+            return _error(
+                "INVALID_ORDER_BY",
+                "order_by debe tener el formato 'Campo asc|desc'.",
+            )
+
+    # Determinar campos a usar
+    if select:
+        selected_fields = select
+    elif object_name.lower() in ("incidents", "incident"):
+        selected_fields = DEFAULT_SELECT
+    elif object_name.lower() in ("employees", "employee"):
+        selected_fields = EMPLOYEE_DEFAULT_SELECT
+    else:
+        selected_fields = None
+
+    # Traer todos los registros con paginación
+    all_records = []
+    skip = 0
+
+    while True:
+        params: dict[str, Any] = {
+            "$top": PAGE_SIZE,
+            "$skip": skip,
+        }
+        if generated_filter:
+            params["$filter"] = generated_filter
+        if generated_order_by:
+            params["$orderby"] = generated_order_by
+        if selected_fields:
+            params["$select"] = selected_fields
+        if search:
+            params["$search"] = search
+
+        raw, err = await _request(
+            "GET", f"/api/odata/businessobject/{object_name}", params=params
+        )
+        if err:
+            return err
+
+        # Extraer registros
+        if isinstance(raw, dict) and "value" in raw:
+            records = raw["value"]
+        else:
+            records = []
+
+        if not records:
+            break
+
+        all_records.extend(records)
+        skip += PAGE_SIZE
+
+    if not all_records:
+        return _error(
+            "NO_DATA",
+            "La consulta no devolvio ningun registro.",
+        )
+
+    # Crear Excel con openpyxl
+    wb = Workbook()
+    ws = wb.active
+    ws.title = object_name[:31]  # Los nombres de hojas en Excel tienen máx 31 caracteres
+
+    # Encabezados
+    if all_records:
+        headers = list(all_records[0].keys())
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=1, column=col_idx, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+
+        # Datos
+        for row_idx, record in enumerate(all_records, start=2):
+            for col_idx, header in enumerate(headers, start=1):
+                value = record.get(header, "")
+                ws.cell(row=row_idx, column=col_idx, value=value)
+
+        # Ajustar ancho de columnas
+        for col_idx, header in enumerate(headers, start=1):
+            max_len = len(str(header))
+            for record in all_records:
+                max_len = max(max_len, len(str(record.get(header, ""))))
+            ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = min(max_len + 2, 50)
+
+    # Guardar a bytes
+    excel_bytes = io.BytesIO()
+    wb.save(excel_bytes)
+    excel_bytes.seek(0)
+
+    # Convertir a base64
+    excel_b64 = base64.b64encode(excel_bytes.read()).decode("utf-8")
+
+    # Generar nombre del archivo
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    filename = f"{object_name}_{today}.xlsx"
+
+    return {
+        "ok": True,
+        "data": {
+            "filename": filename,
+            "base64": excel_b64,
+            "record_count": len(all_records),
+        },
+    }
+    
 # Tools - Metadata & Discovery
 
 # Valores conocidos para campos comunes (no siempre expuestos en metadatos XML)
