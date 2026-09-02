@@ -485,6 +485,8 @@ async def delete_business_object(object_name: str, rec_id: str) -> dict:
 
 # Tools - Export
 
+# Tools - Export
+
 @mcp.tool()
 async def export_to_excel(
     object_name: str,
@@ -527,7 +529,7 @@ async def export_to_excel(
         "RecId,DisplayName,LoginID,PrimaryEmail,Department,Status,"
         "Title,ManagerEmail,EmployeeLocation,BusinessUnit,PrimaryPhone,Disabled"
     )
-    PAGE_SIZE = 1000  # Traer 1000 registros por página
+    PAGE_SIZE = 1000  # Traer 1000 registros por pagina
 
     # Construir filtro OData
     if filters:
