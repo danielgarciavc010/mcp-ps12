@@ -36,8 +36,6 @@ import re
 import sys
 import unicodedata
 import pathlib as _pathlib
-import base64
-import io
 from datetime import datetime
 from typing import Any, Optional
 
@@ -485,8 +483,6 @@ async def delete_business_object(object_name: str, rec_id: str) -> dict:
 
 # Tools - Export
 
-# Tools - Export
-
 @mcp.tool()
 async def export_to_excel(
     object_name: str,
@@ -498,7 +494,7 @@ async def export_to_excel(
     """
     Exporta TODOS los registros de un business object a un archivo Excel,
     con paginación automática. Genera un archivo .xlsx y devuelve el contenido
-    en base64.
+    dentro del workspace de la sesión.
 
     Args:
         object_name: nombre del business object en plural (ej: 'incidents').
@@ -516,7 +512,6 @@ async def export_to_excel(
             "ok": true,
             "data": {
                 "filename": "incidents_2026-09-02.xlsx",
-                "base64": "UEsDBBQABgAIAAAA...",
                 "record_count": 150
             }
         }
@@ -529,7 +524,7 @@ async def export_to_excel(
         "RecId,DisplayName,LoginID,PrimaryEmail,Department,Status,"
         "Title,ManagerEmail,EmployeeLocation,BusinessUnit,PrimaryPhone,Disabled"
     )
-    PAGE_SIZE = 100  # Traer 100 registros por pagina
+    PAGE_SIZE = 100  # Límite máximo de Ivanti API (ISM_4000)
 
     # Construir filtro OData
     if filters:
@@ -630,26 +625,23 @@ async def export_to_excel(
                 max_len = max(max_len, len(str(record.get(header, ""))))
             ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = min(max_len + 2, 50)
 
-    # Guardar a bytes
-    excel_bytes = io.BytesIO()
-    wb.save(excel_bytes)
-    excel_bytes.seek(0)
-
-    # Convertir a base64
-    excel_b64 = base64.b64encode(excel_bytes.read()).decode("utf-8")
-
     # Generar nombre del archivo
     today = datetime.utcnow().strftime("%Y-%m-%d")
-    filename = f"{object_name}_{today}.xlsx"
+    safe_object_name = re.sub(r"[^A-Za-z0-9_-]", "_", object_name).strip("._") or "export"
+    filename = f"{safe_object_name}_{today}.xlsx"
+
+    # El workflow ejecuta el MCP con el workspace de la sesión como cwd.
+    file_path = os.path.join(os.getcwd(), filename)
+    wb.save(file_path)
 
     return {
         "ok": True,
         "data": {
             "filename": filename,
-            "base64": excel_b64,
             "record_count": len(all_records),
         },
     }
+
     
 # Tools - Metadata & Discovery
 
