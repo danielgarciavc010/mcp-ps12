@@ -37,6 +37,7 @@ import sys
 import unicodedata
 import pathlib as _pathlib
 from datetime import datetime
+from enum import Enum
 from typing import Any, Optional
 
 import httpx
@@ -75,6 +76,12 @@ HEADERS = {
     "Authorization": f"rest_api_key={API_KEY}",
     "Content-Type":  "application/json",
 }
+
+
+class IncidentLevel(str, Enum):
+    HIGH = "High"
+    MEDIUM = "Medium"
+    LOW = "Low"
 
 mcp = FastMCP(
     name="ivanti-itsm",
@@ -134,8 +141,6 @@ def _odata_literal(value: Any) -> str:
 
     escaped = str_value.replace("'", "''")
     return f"'{escaped}'"
-
-
 
 
 def _build_odata_filter(filters: list[dict[str, Any]]) -> str | None:
@@ -291,7 +296,6 @@ async def list_business_objects(
 
     return {"ok": True, "data": raw}
 
-    
 
 @mcp.tool()
 async def get_business_object(object_name: str, rec_id: str) -> dict:
@@ -343,10 +347,8 @@ async def create_incident_simple(
     subject: str,
     description: str,
     customer_name: str,
-    urgency: str = "Medium",
-    impact: str = "Medium",
-    category: str = "Service Desk",
-    service: str = "Service Desk",
+    urgency: IncidentLevel = IncidentLevel.MEDIUM,
+    impact: IncidentLevel = IncidentLevel.MEDIUM,
 ) -> dict:
     """
     Crea un ticket de incidencia de forma segura, resolviendo las
@@ -359,12 +361,28 @@ async def create_incident_simple(
         customer_name: Nombre completo, login o email del usuario afectado.
         urgency: Urgencia: 'High', 'Medium', 'Low'.
         impact: Impacto: 'High', 'Medium', 'Low'.
-        category: Categoria del incidente.
-        service: Servicio asociado.
 
     Returns:
         {"ok": true, "data": {"IncidentNumber": "...", "RecId": "...", ...}}
     """
+    subject = subject.strip()
+    description = description.strip()
+    customer_name = customer_name.strip()
+    if not subject or not description or not customer_name:
+        return _error(
+            "INVALID_INCIDENT_DATA",
+            "subject, description y customer_name son obligatorios y no pueden estar vacios.",
+        )
+
+    try:
+        urgency = IncidentLevel(urgency)
+        impact = IncidentLevel(impact)
+    except (TypeError, ValueError):
+        return _error(
+            "INVALID_INCIDENT_DATA",
+            "urgency e impact deben ser 'High', 'Medium' o 'Low'.",
+        )
+
     safe_customer = customer_name.replace("'", "''")
     search_filter = (
         f"contains(DisplayName, '{safe_customer}') or "
@@ -377,8 +395,8 @@ async def create_incident_simple(
         "/api/odata/businessobject/employees",
         params={
             "$filter": search_filter,
-            "$top": 1,
-            "$select": "RecId,DisplayName,PrimaryEmail,LoginID,Team,Team_Valid",
+            "$top": 5,
+            "$select": "RecId,DisplayName,PrimaryEmail,LoginID",
         },
     )
     if err:
@@ -395,26 +413,41 @@ async def create_incident_simple(
             "Pide al usuario que verifique el nombre, login o email.",
         )
 
-    employee = values[0]
-    customer_rec_id = employee["RecId"]
+    exact_matches = [
+        employee
+        for employee in values
+        if any(
+            customer_name.casefold() == str(employee.get(field, "")).casefold()
+            for field in ("DisplayName", "PrimaryEmail", "LoginID")
+        )
+    ]
+    if len(exact_matches) == 1:
+        employee = exact_matches[0]
+    elif len(values) > 1:
+        return _error(
+            "EMPLOYEE_AMBIGUOUS",
+            f"Se encontraron varios empleados coincidentes con '{customer_name}'. "
+            "Pide el login o email exacto antes de crear el incidente.",
+        )
+    else:
+        employee = values[0]
+
+    customer_rec_id = employee.get("RecId")
+    if not customer_rec_id:
+        return _error(
+            "EMPLOYEE_INVALID",
+            f"El empleado '{customer_name}' no contiene un RecId valido.",
+        )
     customer_display = employee.get("DisplayName", customer_name)
-    employee_team = employee.get("Team", "Service Desk")
 
     fields = {
         "Subject": subject,
         "Symptom": description,
-        "Urgency": urgency,
-        "Impact": impact,
+        "Urgency": urgency.value,
+        "Impact": impact.value,
         "Status": "Logged",
-        "Category": category,
-        "Service": service,
         "ProfileLink_RecID": customer_rec_id,
         "ProfileLink_Category": "Employee",
-        "Customer": customer_display,
-        "OwnerTeam": "Service Desk",
-        "Owner": "Admin",
-        "Team": employee_team if employee_team else "Service Desk",
-        "Source": "Phone",
     }
 
     raw, err = await _request(
@@ -423,7 +456,13 @@ async def create_incident_simple(
     if err:
         return err
 
-    inc_number = raw.get("IncidentNumber", "desconocido") if isinstance(raw, dict) else "desconocido"
+    if not isinstance(raw, dict):
+        return _error(
+            "INCIDENT_CREATE_INVALID_RESPONSE",
+            "Ivanti no devolvio los datos del incidente creado.",
+        )
+
+    inc_number = raw.get("IncidentNumber", "desconocido")
     return {
         "ok": True,
         "data": {
