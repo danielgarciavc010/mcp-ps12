@@ -346,7 +346,7 @@ async def create_business_object(
 async def create_incident_simple(
     subject: str,
     description: str,
-    customer_name: str,
+    customer_email: str,
     urgency: IncidentLevel = IncidentLevel.MEDIUM,
     impact: IncidentLevel = IncidentLevel.MEDIUM,
 ) -> dict:
@@ -358,7 +358,7 @@ async def create_incident_simple(
     Args:
         subject: Resumen breve del problema.
         description: Detalles completos del sintoma o problema.
-        customer_name: Nombre completo, login o email del usuario afectado.
+        customer_email: Email del usuario afectado.
         urgency: Urgencia: 'High', 'Medium', 'Low'.
         impact: Impacto: 'High', 'Medium', 'Low'.
 
@@ -367,11 +367,17 @@ async def create_incident_simple(
     """
     subject = subject.strip()
     description = description.strip()
-    customer_name = customer_name.strip()
-    if not subject or not description or not customer_name:
+    customer_email = customer_email.strip()
+    if not subject or not description or not customer_email:
         return _error(
             "INVALID_INCIDENT_DATA",
-            "subject, description y customer_name son obligatorios y no pueden estar vacios.",
+            "subject, description y customer_email son obligatorios y no pueden estar vacios.",
+        )
+
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", customer_email):
+        return _error(
+            "INVALID_CUSTOMER_EMAIL",
+            "customer_email debe ser un email valido del usuario afectado.",
         )
 
     try:
@@ -383,62 +389,40 @@ async def create_incident_simple(
             "urgency e impact deben ser 'High', 'Medium' o 'Low'.",
         )
 
-    safe_customer = customer_name.replace("'", "''")
-    search_filter = (
-        f"contains(DisplayName, '{safe_customer}') or "
-        f"contains(PrimaryEmail, '{safe_customer}') or "
-        f"contains(LoginID, '{safe_customer}')"
-    )
+    safe_customer_email = customer_email.replace("'", "''")
+    search_filter = f"PrimaryEmail eq '{safe_customer_email}'"
 
     raw_emp, err = await _request(
         "GET",
         "/api/odata/businessobject/employees",
         params={
             "$filter": search_filter,
-            "$top": 5,
-            "$select": "RecId,DisplayName,PrimaryEmail,LoginID",
+            "$top": 1,
+            "$select": "RecId,DisplayName,PrimaryEmail",
         },
     )
     if err:
         return _error(
             "EMPLOYEE_SEARCH_ERROR",
-            f"Error buscando empleado '{customer_name}': {err['error']['message']}",
+            f"Error buscando el email '{customer_email}': {err['error']['message']}",
         )
 
     values = raw_emp.get("value", []) if isinstance(raw_emp, dict) else []
     if not values:
         return _error(
             "EMPLOYEE_NOT_FOUND",
-            f"No se encontro un empleado coincidente con '{customer_name}'. "
-            "Pide al usuario que verifique el nombre, login o email.",
+            f"No se encontro un empleado con el email '{customer_email}'. "
+            "Pide al usuario que verifique el email.",
         )
-
-    exact_matches = [
-        employee
-        for employee in values
-        if any(
-            customer_name.casefold() == str(employee.get(field, "")).casefold()
-            for field in ("DisplayName", "PrimaryEmail", "LoginID")
-        )
-    ]
-    if len(exact_matches) == 1:
-        employee = exact_matches[0]
-    elif len(values) > 1:
-        return _error(
-            "EMPLOYEE_AMBIGUOUS",
-            f"Se encontraron varios empleados coincidentes con '{customer_name}'. "
-            "Pide el login o email exacto antes de crear el incidente.",
-        )
-    else:
-        employee = values[0]
+    employee = values[0]
 
     customer_rec_id = employee.get("RecId")
     if not customer_rec_id:
         return _error(
             "EMPLOYEE_INVALID",
-            f"El empleado '{customer_name}' no contiene un RecId valido.",
+            f"El empleado '{customer_email}' no contiene un RecId valido.",
         )
-    customer_display = employee.get("DisplayName", customer_name)
+    customer_display = employee.get("DisplayName", customer_email)
 
     fields = {
         "Subject": subject,
