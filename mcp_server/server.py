@@ -458,7 +458,6 @@ async def create_incident_simple(
     }
 
 
-
 @mcp.tool()
 async def update_business_object(
     object_name: str, rec_id: str, fields: dict[str, Any]
