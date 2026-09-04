@@ -83,6 +83,34 @@ class IncidentLevel(str, Enum):
     MEDIUM = "Medium"
     LOW = "Low"
 
+class IncidentService(str, Enum):
+    SAI_RPA = "SAI-RPA"
+    RED_INTELIGENTE_060 = "060 y Red Inteligente"
+    DIR3 = "DIR3"
+    REPRESENTA = "REPRESENTA"
+    CLIENTE_FIRMA = "Cliente Firma"
+    FIRE = "FIRe"
+    AFIRMA = "Afirma"
+    CLAVE = "Clave"
+    CASOS_USO_IA = "Casos uso IA"
+    APODERA = "APODERA"
+    ITSM = "ITSM"
+
+
+SERVICE_VALID_IDS: dict[IncidentService, str] = {
+    IncidentService.SAI_RPA: "160EBC90B5E344A8A0C33E05E0160965",
+    IncidentService.RED_INTELIGENTE_060: "AE752CE1E9924CB58FDC014C534C6BC1",
+    IncidentService.DIR3: "DC2CE70F083D4AC78EAB1BC936AC9992",
+    IncidentService.REPRESENTA: "01E49C8C08414B61AB67B2C433FBA027",
+    IncidentService.CLIENTE_FIRMA: "CC0E6A8D7F10488594DD03673E21C482",
+    IncidentService.FIRE: "087040A6D7FF41FE9B654B53547D459A",
+    IncidentService.AFIRMA: "195B95A106E3480EA04D57FC1DD68702",
+    IncidentService.CLAVE: "F3F9F654F61F4B13A8377872E80E165E",
+    IncidentService.CASOS_USO_IA: "65241CE74E324E13B13AEE2568C4D05E",
+    IncidentService.APODERA: "E68B54C081A34B2695802CC8ECA47778",
+    IncidentService.ITSM: "1E5729FDEDED4EEFAA0DA2D699D37AAD",
+}
+
 mcp = FastMCP(
     name="ivanti-itsm",
     instructions=(
@@ -349,6 +377,8 @@ async def create_incident_simple(
     customer_email: str,
     urgency: IncidentLevel = IncidentLevel.MEDIUM,
     impact: IncidentLevel = IncidentLevel.MEDIUM,
+    category: str = "Service Desk",
+    service: IncidentService = IncidentService.ITSM,
 ) -> dict:
     """
     Crea un ticket de incidencia de forma segura, resolviendo las
@@ -361,6 +391,8 @@ async def create_incident_simple(
         customer_email: Email del usuario afectado.
         urgency: Urgencia: 'High', 'Medium', 'Low'.
         impact: Impacto: 'High', 'Medium', 'Low'.
+        category: Categoria del incidente.
+        service: Servicio asociado al incidente. Usa ITSM por defecto.
 
     Returns:
         {"ok": true, "data": {"IncidentNumber": "...", "RecId": "...", ...}}
@@ -381,6 +413,15 @@ async def create_incident_simple(
         return _error(
             "INVALID_INCIDENT_DATA",
             "urgency e impact deben ser 'High', 'Medium' o 'Low'.",
+        )
+
+    try:
+        service = IncidentService(service)
+    except (TypeError, ValueError):
+        allowed = ", ".join(item.value for item in IncidentService)
+        return _error(
+            "INVALID_INCIDENT_SERVICE",
+            f"service debe ser uno de estos valores: {allowed}.",
         )
 
     safe_customer_email = customer_email.replace("'", "''")
@@ -424,6 +465,9 @@ async def create_incident_simple(
         "Urgency": urgency.value,
         "Impact": impact.value,
         "Status": "Logged",
+        "Category": category,
+        "Service": service.value,
+        "Service_Valid": SERVICE_VALID_IDS[service],
         "ProfileLink_RecID": customer_rec_id,
         "ProfileLink_Category": "Employee",
     }
@@ -450,6 +494,7 @@ async def create_incident_simple(
             "Status": raw.get("Status", "Logged") if isinstance(raw, dict) else "Logged",
         },
     }
+
 
 
 @mcp.tool()
