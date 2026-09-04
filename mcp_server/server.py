@@ -374,12 +374,6 @@ async def create_incident_simple(
             "subject, description y customer_email son obligatorios y no pueden estar vacios.",
         )
 
-    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", customer_email):
-        return _error(
-            "INVALID_CUSTOMER_EMAIL",
-            "customer_email debe ser un email valido del usuario afectado.",
-        )
-
     try:
         urgency = IncidentLevel(urgency)
         impact = IncidentLevel(impact)
